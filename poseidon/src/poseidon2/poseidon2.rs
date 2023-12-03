@@ -502,24 +502,25 @@ mod poseidon2_tests_bn256 {
     fn compute_hash_for_two_bn256_numbers() {
         use crate::ark_ff::Zero;
 
-        // 创建 Poseidon2 实例
+        // create Poseidon2 entity
         let poseidon2 = Poseidon2::new(&POSEIDON2_BN256_PARAMS);
         let input_len = poseidon2.params.t;
 
-        // 创建输入向量，并根据需要进行填充
+        // create input vector and pad it if needed
         let mut input = Vec::new();
-        input.push(Scalar::from(123u64)); // 第一个数
-        input.push(Scalar::from(456u64)); // 第二个数
+        input.push(Scalar::from(123u64)); // first number
+        input.push(Scalar::from(456u64)); // second number
 
-        // 如果 t 大于 2，则填充剩余的输入
+        // if t > 2, then pad the remaining input
         while input.len() < input_len {
-            input.push(Scalar::zero()); // 使用 Scalar 类型的零值进行填充
+            // use Scalar::zero() to fill the remaining input
+            input.push(Scalar::zero());
         }
 
-        // 计算哈希
+        // calculate hash
         let hash = poseidon2.permutation(&input);
 
-        // 输出或处理哈希值
+        // output the hash
         println!("Hash: {:?}", to_hex(&hash));
     }
 
@@ -583,6 +584,8 @@ mod poseidon2_tests_bn256 {
             input.push(Scalar::from(i as u64));
         }
         let perm = poseidon2.permutation(&input);
+        let perm0 = to_hex(&perm);
+        dbg!(perm0);
         assert_eq!(
             perm[0],
             from_hex("0x0bb61d24daca55eebcb1929a82650f328134334da98ea4f847f760054f4a3033")

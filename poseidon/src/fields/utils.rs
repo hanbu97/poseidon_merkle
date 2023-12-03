@@ -3,7 +3,7 @@ use ark_ff::PrimeField;
 // use sha3::digest::XofReader;
 // use std::cmp::min;
 // use core::num::ParseIntError;
-
+use crate::ark_ff::BigInteger;
 use hex::FromHex;
 
 pub fn from_hex<F: PrimeField>(s: &str) -> F {
@@ -25,8 +25,15 @@ pub fn random_scalar_without_0<F: PrimeField>() -> F {
     }
 }
 
-pub fn to_hex<F: PrimeField>(field_element: &F) -> String {
-    field_element.to_string()
+pub fn to_hex<F: PrimeField>(field_elements: &[F]) -> Vec<String> {
+    field_elements
+        .iter()
+        .map(|element| {
+            let big_int = element.into_bigint(); // Convert the element to its BigInteger representation
+            let bytes = big_int.to_bytes_be(); // Convert the BigInteger to a byte array in big-endian
+            format!("0x{}", hex::encode(bytes)) // Prepend '0x' to the hexadecimal string
+        })
+        .collect() // Collect the converted strings into a Vec
 }
 
 //-----------------------------------------------------------------------------
