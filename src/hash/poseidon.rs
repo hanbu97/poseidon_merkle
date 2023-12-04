@@ -1,10 +1,21 @@
 use ark_ff::PrimeField;
 use serde::de::DeserializeOwned;
 use zkhash::{
-    fields::utils::{
-        decode_from_cbor_string, encode_to_cbor_string, from_hex, random_scalar, to_hex,
+    fields::{
+        bn256::FpBN256,
+        goldilocks::FpGoldiLocks,
+        utils::{decode_from_cbor_string, encode_to_cbor_string, from_hex, random_scalar, to_hex},
+        vesta::FpVesta,
     },
-    poseidon2::poseidon2::Poseidon2,
+    poseidon2::{
+        poseidon2::Poseidon2,
+        poseidon2_instance_bn256::POSEIDON2_BN256_PARAMS,
+        poseidon2_instance_goldilocks::{
+            POSEIDON2_GOLDILOCKS_12_PARAMS, POSEIDON2_GOLDILOCKS_16_PARAMS,
+            POSEIDON2_GOLDILOCKS_20_PARAMS, POSEIDON2_GOLDILOCKS_8_PARAMS,
+        },
+        poseidon2_instance_vesta::POSEIDON2_VESTA_PARAMS,
+    },
 };
 
 // Poseidon hash
@@ -91,11 +102,12 @@ pub enum PoseidonMethod {
 }
 
 impl PoseidonMethod {
-    pub fn new_bn256() -> anyhow::Result<Self> {
-        Ok(PoseidonMethod::Bn256)
+    pub fn new_bn256() -> anyhow::Result<Poseidon2<FpBN256>> {
+        let poseidon2 = Poseidon2::new(&POSEIDON2_BN256_PARAMS);
+        Ok(poseidon2)
     }
 
-    pub fn new_goldilocks(rounds: usize) -> anyhow::Result<Self> {
+    pub fn new_goldilocks(rounds: usize) -> anyhow::Result<Poseidon2<FpGoldiLocks>> {
         // check if rounds is valid(8, 12, 16, 20)
         if rounds != 8 && rounds != 12 && rounds != 16 && rounds != 20 {
             return Err(anyhow::anyhow!(
@@ -103,11 +115,24 @@ impl PoseidonMethod {
             ));
         }
 
-        Ok(PoseidonMethod::Goldilocks(rounds))
+        let poseidon2 = match rounds {
+            8 => Poseidon2::new(&POSEIDON2_GOLDILOCKS_8_PARAMS),
+            12 => Poseidon2::new(&POSEIDON2_GOLDILOCKS_12_PARAMS),
+            16 => Poseidon2::new(&POSEIDON2_GOLDILOCKS_16_PARAMS),
+            20 => Poseidon2::new(&POSEIDON2_GOLDILOCKS_20_PARAMS),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Invalid rounds number for Goldilocks Poseidon hash function"
+                ))
+            }
+        };
+
+        Ok(poseidon2)
     }
 
-    pub fn new_vesta() -> anyhow::Result<Self> {
-        Ok(PoseidonMethod::Vesta)
+    pub fn new_vesta() -> anyhow::Result<Poseidon2<FpVesta>> {
+        let poseidon2 = Poseidon2::new(&POSEIDON2_VESTA_PARAMS);
+        Ok(poseidon2)
     }
 
     // get statesize

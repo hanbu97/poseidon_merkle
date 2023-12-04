@@ -2,6 +2,7 @@ use ark_ff::PrimeField;
 
 use crate::hash::HashFunction;
 
+#[derive(Debug)]
 pub struct Proof<F: PrimeField> {
     pub index: usize,
     pub value: F,
@@ -78,44 +79,54 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     }
 
     /// Computes the hashes for zero-value nodes at each level of the tree.
-    fn compute_zero_hashes(&mut self) {
+    fn compute_zero_hashes(&mut self) -> anyhow::Result<()> {
         let mut current_zero_hash = self.hash_function.zero();
 
         for i in 0..self.zero_hashes.len() {
-            self.zero_hashes[i] = self._hash(&current_zero_hash, &current_zero_hash);
+            self.zero_hashes[i] = self._hash(&current_zero_hash, &current_zero_hash)?;
             current_zero_hash = self.zero_hashes[i].clone();
         }
+
+        Ok(())
     }
 
-    /// Recursive helper function for insert_leaf.
     fn insert_leaf_recursive(
         &mut self,
         node_index: usize,
         leaf_index: usize,
         value: F,
         level: usize,
-    ) {
-        if level == self.height {
+    ) -> anyhow::Result<()> {
+        // Check if node_index is within the range of data
+        if node_index >= self.data.len() {
+            return Ok(());
+        }
+
+        if level == self.height - 1 {
+            // At a leaf node, set the value
             self.data[node_index] = value;
         } else {
-            let width = self.leafs >> level;
-            let left_index = node_index * 2 + 1;
+            let half_width = self.leafs >> (level + 1); // Number of nodes on each side at current level
+            let left_index = 2 * node_index + 1;
             let right_index = left_index + 1;
 
-            if leaf_index < width / 2 {
-                self.insert_leaf_recursive(left_index, leaf_index, value, level + 1);
+            if leaf_index < half_width {
+                // Recurse into the left subtree
+                self.insert_leaf_recursive(left_index, leaf_index, value, level + 1)?;
             } else {
-                self.insert_leaf_recursive(right_index, leaf_index - width / 2, value, level + 1);
+                // Recurse into the right subtree
+                self.insert_leaf_recursive(right_index, leaf_index - half_width, value, level + 1)?;
             }
 
-            let left_hash = &self.data[left_index];
-            let right_hash = if right_index < self.data.len() {
-                &self.data[right_index]
-            } else {
-                &self.zero_hashes[level]
-            };
-            self.data[node_index] = self._hash(left_hash, right_hash);
+            let tmpzero = self.hash_function.zero();
+
+            // Update the hash of the parent node
+            let left_hash: &F = self.data.get(left_index).unwrap_or(&tmpzero);
+            let right_hash = self.data.get(right_index).unwrap_or(&tmpzero);
+            self.data[node_index] = self._hash(left_hash, right_hash)?;
         }
+
+        Ok(())
     }
 
     /// Inserts a leaf node value and updates the Merkle tree.
@@ -125,7 +136,7 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
         }
         self.min_index = self.min_index.min(index);
         self.max_index = self.max_index.max(index);
-        self.insert_leaf_recursive(0, index, value, 0);
+        self.insert_leaf_recursive(0, index, value, 0)?;
 
         Ok(())
     }
@@ -144,13 +155,16 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
         let mut width = self.leafs;
 
         lemma.push(self.data[idx].clone());
-        while base + 1 < self.data.len() {
+        while base < self.data.len() {
             let sibling = if idx % 2 == 0 {
                 base + idx + 1
             } else {
                 base + idx - 1
             };
-            path.push(self.data[sibling].clone());
+
+            if sibling < self.data.len() {
+                path.push(self.data[sibling].clone());
+            }
 
             idx = (base + idx) / 2;
             base += width;
@@ -167,20 +181,20 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     }
 
     /// Verifies a proof.
-    pub fn prove(&self, proof: Proof<F>) -> bool {
+    pub fn prove(&self, proof: Proof<F>) -> anyhow::Result<bool> {
         let mut computed_hash = proof.value;
         let mut idx = proof.index;
 
         for sibling_hash in proof.siblings {
             if idx % 2 == 0 {
-                computed_hash = self._hash(&computed_hash, &sibling_hash);
+                computed_hash = self._hash(&computed_hash, &sibling_hash)?;
             } else {
-                computed_hash = self._hash(&sibling_hash, &computed_hash);
+                computed_hash = self._hash(&sibling_hash, &computed_hash)?;
             }
             idx /= 2;
         }
 
-        computed_hash == proof.root
+        Ok(computed_hash == proof.root)
     }
 
     /// Returns the Merkle root.
@@ -188,7 +202,8 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
         self.data.last().unwrap().clone()
     }
 
-    fn _hash(&self, a: &F, b: &F) -> F {
-        *a + *b
+    fn _hash(&self, a: &F, b: &F) -> anyhow::Result<F> {
+        let out = self.hash_function.hash(a, b)?;
+        Ok(out[1].clone())
     }
 }
