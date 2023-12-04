@@ -10,6 +10,7 @@ use zkhash::{
 // A simplified hash function (for demonstration purposes)
 fn hash(data: &str) -> String {
     // format!("{:x}", md5::compute(data))
+    "hash".to_string()
 }
 
 // The Merkle Tree structure

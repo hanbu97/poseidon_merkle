@@ -488,7 +488,7 @@ mod poseidon2_tests_bn256 {
     use crate::{
         fields::{
             bn256::FpBN256,
-            utils::random_scalar,
+            utils::{encode_to_cbor_string, encode_to_cbor_string_slim, random_scalar},
             utils::{from_hex, to_hex},
         },
         poseidon2::poseidon2_instance_bn256::POSEIDON2_BN256_PARAMS,
@@ -546,11 +546,37 @@ mod poseidon2_tests_bn256 {
         let hash2 = poseidon2.permutation(&input2);
 
         // 输出或处理哈希值
-        println!("Hash1: {:?}", hash1);
-        println!("Hash2: {:?}", hash2);
+        println!("Hash1: {:?}", to_hex(&hash1));
+        println!("Hash2: {:?}", to_hex(&hash2));
 
         // 断言以确保哈希值不同
         assert_ne!(hash1, hash2, "Hashes should not be equal");
+    }
+
+    #[test]
+    fn zero_perm() {
+        use crate::ark_ff::Zero;
+        let poseidon2 = Poseidon2::new(&POSEIDON2_BN256_PARAMS);
+        let t = poseidon2.params.t;
+
+        let mut input0 = Vec::new();
+        while input0.len() < t {
+            input0.push(Scalar::zero());
+        }
+        let input1: Vec<Scalar> = (0..t).map(|_| random_scalar()).collect();
+
+        let perm1 = poseidon2.permutation(&input0);
+        let cbor_str = encode_to_cbor_string(&perm1);
+        dbg!(cbor_str);
+        let perm2 = poseidon2.permutation(&input0);
+        let cbor_str = encode_to_cbor_string(&perm2);
+        dbg!(cbor_str);
+        let perm3 = poseidon2.permutation(&input1);
+        let cbor_str = encode_to_cbor_string(&perm3);
+        dbg!(cbor_str);
+        let perm4 = poseidon2.permutation(&input1);
+        let cbor_str = encode_to_cbor_string(&perm4);
+        dbg!(cbor_str);
     }
 
     #[test]
@@ -586,6 +612,13 @@ mod poseidon2_tests_bn256 {
         let perm = poseidon2.permutation(&input);
         let perm0 = to_hex(&perm);
         dbg!(perm0);
+
+        let cbor_string = encode_to_cbor_string(&perm);
+        dbg!(cbor_string);
+
+        let cbor_string_slim = encode_to_cbor_string_slim(&perm);
+        dbg!(cbor_string_slim);
+
         assert_eq!(
             perm[0],
             from_hex("0x0bb61d24daca55eebcb1929a82650f328134334da98ea4f847f760054f4a3033")

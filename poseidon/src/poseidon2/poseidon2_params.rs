@@ -87,5 +87,4 @@ impl<F: PrimeField> Poseidon2Params<F> {
         }
         out
     }
-
 }

@@ -6,6 +6,11 @@ use ark_ff::PrimeField;
 use crate::ark_ff::BigInteger;
 use hex::FromHex;
 
+// use cbor4ii::serde::{from_reader, to_writer};
+use cbor4ii::serde::{from_slice, to_vec};
+use data_encoding::BASE64;
+use serde::de::DeserializeOwned;
+
 pub fn from_hex<F: PrimeField>(s: &str) -> F {
     let a = Vec::from_hex(&s[2..]).expect("Invalid Hex String");
     F::from_be_bytes_mod_order(&a as &[u8])
@@ -34,6 +39,70 @@ pub fn to_hex<F: PrimeField>(field_elements: &[F]) -> Vec<String> {
             format!("0x{}", hex::encode(bytes)) // Prepend '0x' to the hexadecimal string
         })
         .collect() // Collect the converted strings into a Vec
+}
+
+pub fn encode_to_cbor_string<F: PrimeField>(field_elements: &[F]) -> String {
+    // TODO: cbor size opt
+    // let elements: Vec<<F as PrimeField>::BigInt> = field_elements
+    //     .iter()
+    //     .map(|element| {
+    //         let big_int = element.into_bigint(); // Convert the element to its BigInteger representation
+    //         big_int
+    //     })
+    //     .collect();
+    let elements: Vec<Vec<u8>> = field_elements
+        .iter()
+        .map(|element| {
+            let big_int: <F as PrimeField>::BigInt = element.into_bigint(); // Convert the element to its BigInteger representation
+            let bytes = big_int.to_bytes_be(); // Convert the BigInteger to a byte array in big-endian
+
+            bytes
+        })
+        .collect();
+
+    let buf = to_vec(Vec::new(), &elements).expect("CBOR encoding failed");
+    BASE64.encode(&buf)
+}
+
+pub fn encode_to_cbor_string_slim<F: PrimeField>(field_elements: &[F]) -> String {
+    let elements: Vec<Vec<u8>> = field_elements
+        .iter()
+        .map(|element| {
+            let big_int = element.into_bigint(); // Convert the element to its BigInteger representation
+            let limbs = big_int.as_ref();
+
+            // Find the highest non-zero limb
+            let last_non_zero = limbs.iter().rposition(|&limb| limb != 0).unwrap_or(0);
+
+            // Serialize only the necessary limbs
+            let necessary_limbs = &limbs[..=last_non_zero];
+            necessary_limbs
+                .iter()
+                .flat_map(|&limb| limb.to_be_bytes())
+                .collect()
+        })
+        .collect();
+
+    let buf = to_vec(Vec::new(), &elements).expect("CBOR encoding failed");
+    BASE64.encode(&buf)
+}
+
+// g5ggCxi2GB0YJBjaGMoYVRjuGLwYsRiSGJoYghhlDxgyGIEYNBgzGE0YqRiOGKQY+BhHGPcYYAUYTxhKGDAYM5ggGDAYOxhvGHwYhhjQGEMYvxjLGMwYgBghGE8YJhijAhh3GKEYXRg/GHQYyhhlGEkYkhjeGP4Yfxj4GNAYNRhwmCAYHhjSGFEYlBhUGCsSGO4Y+BhhGHMYYRjDGLoYfBhSGOYYYBixGEUYmRhEGCcYzBiGGCkYYhhCGM8YdhhuGMg="
+
+pub fn decode_from_cbor_string<F: PrimeField + DeserializeOwned>(encoded_str: &str) -> Vec<F> {
+    // Decode the Base64 string into a CBOR byte sequence
+    let cbor_bytes = BASE64
+        .decode(encoded_str.as_bytes())
+        .expect("Failed to decode Base64");
+
+    // Deserialize the CBOR byte sequence into Vec<Vec<u8>>
+    let byte_arrays: Vec<Vec<u8>> = from_slice(&cbor_bytes).expect("Failed to decode CBOR");
+
+    // Convert each byte array back to a PrimeField element
+    byte_arrays
+        .into_iter()
+        .map(|bytes| F::from_be_bytes_mod_order(&bytes))
+        .collect()
 }
 
 //-----------------------------------------------------------------------------

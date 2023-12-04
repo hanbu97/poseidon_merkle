@@ -1,7 +1,10 @@
 [package]
 name = "zkhash"
 version = "0.2.0"
-authors = ["Markus Schofnegger <mschofnegger@horizenlabs.io>", "Roman Walch <roman.walch@iaik.tugraz.at>"]
+authors = [
+    "Markus Schofnegger <mschofnegger@horizenlabs.io>",
+    "Roman Walch <roman.walch@iaik.tugraz.at>",
+]
 description = "Rust implementations of Poseidon2 and similar arithmetization-oriented primitives"
 edition = "2018"
 
@@ -20,13 +23,18 @@ group = "0.13"
 halo2 = "=0.1.0-beta.2"
 pasta_curves = "0.5"
 subtle = "2.3"
-random = {package = "rand", version = "0.8"}
+random = { package = "rand", version = "0.8" }
 # for pederson_hash:
-group_ped = { package = "group", version = "0.12.1", features = ["wnaf-memuse"] }
+group_ped = { package = "group", version = "0.12.1", features = [
+    "wnaf-memuse",
+] }
 bitvec = "1.0"
 byteorder = "1.4"
 jubjub = "0.9"
 bls12_381 = "0.7"
+data-encoding = "2.5.0"
+cbor4ii = { version = "0.3.2", features = ["serde1"] }
+anyhow = "1.0.75"
 
 [dev-dependencies]
 criterion = "0.4"
