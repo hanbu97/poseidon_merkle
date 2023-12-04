@@ -1,13 +1,13 @@
+use ark_ff::PrimeField;
+
+use crate::hash::HashFunction;
+
 pub struct Proof {
     pub index: usize,
     pub value: String,
     pub siblings: Vec<String>,
     pub root: String,
     pub empty: bool,
-}
-
-fn _hash(a: &String, b: &String) -> String {
-    format!("{}{}", a, b)
 }
 
 /// Returns the next power of two for a given number if it is not already a power of two.
@@ -30,19 +30,22 @@ pub fn log2_pow2(n: usize) -> usize {
     n.trailing_zeros() as usize
 }
 
-pub struct MerkleTree {
+pub struct MerkleTree<F: PrimeField, H: HashFunction<F>> {
     data: Vec<String>,        // Stores hash values for all nodes
     leafs: usize,             // Number of leaf nodes
     height: usize,            // Height of the tree
     zero_hashes: Vec<String>, // Stores precomputed hashes of zero nodes at each level
     min_index: usize,         // Minimum index of used leaf nodes
     max_index: usize,         // Maximum index of used leaf nodes
+    hash_function: H,         // Hash function instance
 }
 
-impl MerkleTree {
+impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
+    fn _hash(&self, a: &String, b: &String) -> String {}
+
     /// Creates a new Merkle tree with a specified number of levels.
     /// Initializes a tree with 2^n empty leaf nodes.
-    pub fn new_with_levels(n: usize) -> MerkleTree {
+    pub fn new_with_levels(n: usize, hash_function: H) -> anyhow::Result<MerkleTree<F, H>> {
         // Calculate the number of leaf nodes based on the number of levels
         let leafs = 1 << n; // 2^n leaf nodes
 
@@ -50,14 +53,14 @@ impl MerkleTree {
         let leaf_values = vec![String::from("0"); leafs];
 
         // Call the original new method with the prepared leaf values
-        MerkleTree::new(leaf_values)
+        MerkleTree::new(leaf_values, hash_function)
     }
 
     /// Creates a new fully computed Merkle tree with given leaf node values.
-    pub fn new(leaf_values: Vec<String>) -> MerkleTree {
-        let leafs = next_pow2(leaf_values.len());
+    pub fn new(leaf_values: Vec<String>, hash_function: H) -> anyhow::Result<MerkleTree<F, H>> {
+        let leafs: usize = next_pow2(leaf_values.len());
         let size = 2 * leafs - 1;
-        let mut data = vec![String::from("0"); size];
+        let data = vec![String::from("0"); size];
 
         let mut mt = MerkleTree {
             data,
@@ -66,13 +69,14 @@ impl MerkleTree {
             zero_hashes: vec![String::from("0"); log2_pow2(leafs) + 1],
             min_index: usize::MAX,
             max_index: 0,
+            hash_function,
         };
 
         mt.compute_zero_hashes();
         for (i, value) in leaf_values.into_iter().enumerate() {
-            mt.insert_leaf(i, value);
+            mt.insert_leaf(i, value)?;
         }
-        mt
+        Ok(mt)
     }
 
     /// Computes the hashes for zero-value nodes at each level of the tree.
@@ -80,7 +84,7 @@ impl MerkleTree {
         let mut current_zero_hash = String::from("0");
 
         for i in 0..self.zero_hashes.len() {
-            self.zero_hashes[i] = _hash(&current_zero_hash, &current_zero_hash);
+            self.zero_hashes[i] = self._hash(&current_zero_hash, &current_zero_hash);
             current_zero_hash = self.zero_hashes[i].clone();
         }
     }
@@ -112,7 +116,7 @@ impl MerkleTree {
             } else {
                 &self.zero_hashes[level]
             };
-            self.data[node_index] = _hash(left_hash, right_hash);
+            self.data[node_index] = self._hash(left_hash, right_hash);
         }
     }
 
@@ -165,15 +169,15 @@ impl MerkleTree {
     }
 
     /// Verifies a proof.
-    pub fn prove(proof: Proof) -> bool {
+    pub fn prove(&self, proof: Proof) -> bool {
         let mut computed_hash = proof.value;
         let mut idx = proof.index;
 
         for sibling_hash in proof.siblings {
             if idx % 2 == 0 {
-                computed_hash = _hash(&computed_hash, &sibling_hash);
+                computed_hash = self._hash(&computed_hash, &sibling_hash);
             } else {
-                computed_hash = _hash(&sibling_hash, &computed_hash);
+                computed_hash = self._hash(&sibling_hash, &computed_hash);
             }
             idx /= 2;
         }

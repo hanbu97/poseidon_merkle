@@ -7,18 +7,25 @@ use zkhash::{
     poseidon2::{poseidon2::Poseidon2, poseidon2_instance_bn256::POSEIDON2_BN256_PARAMS},
 };
 
-use super::HashFunction;
+// Poseidon hash
+pub struct PoseidonHash<F: PrimeField> {
+    pub method: PoseidonMethod,
+    // padding input with
+    pub summary: Option<Vec<F>>,
+    // padding function
+    pub padding: Option<fn(&[F], usize, left: &[F], right: &[F]) -> Vec<F>>,
+}
 
 // Poseidon hash function
-pub enum Poseidon {
+pub enum PoseidonMethod {
     Bn256,
     Goldilocks(usize),
     Vesta,
 }
 
-impl Poseidon {
+impl PoseidonMethod {
     pub fn new_bn256() -> anyhow::Result<Self> {
-        Ok(Poseidon::Bn256)
+        Ok(PoseidonMethod::Bn256)
     }
 
     pub fn new_goldilocks(rounds: usize) -> anyhow::Result<Self> {
@@ -29,19 +36,19 @@ impl Poseidon {
             ));
         }
 
-        Ok(Poseidon::Goldilocks(rounds))
+        Ok(PoseidonMethod::Goldilocks(rounds))
     }
 
     pub fn new_vesta() -> anyhow::Result<Self> {
-        Ok(Poseidon::Vesta)
+        Ok(PoseidonMethod::Vesta)
     }
 
     // get statesize
     pub fn statesize(&self) -> usize {
         match self {
-            Poseidon::Bn256 => 3,
-            Poseidon::Goldilocks(len) => len.to_owned(),
-            Poseidon::Vesta => 3,
+            PoseidonMethod::Bn256 => 3,
+            PoseidonMethod::Goldilocks(len) => len.to_owned(),
+            PoseidonMethod::Vesta => 3,
         }
     }
 
