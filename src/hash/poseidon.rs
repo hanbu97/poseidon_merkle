@@ -4,16 +4,83 @@ use zkhash::{
     fields::utils::{
         decode_from_cbor_string, encode_to_cbor_string, from_hex, random_scalar, to_hex,
     },
-    poseidon2::{poseidon2::Poseidon2, poseidon2_instance_bn256::POSEIDON2_BN256_PARAMS},
+    poseidon2::poseidon2::Poseidon2,
 };
 
 // Poseidon hash
 pub struct PoseidonHash<F: PrimeField> {
     pub method: PoseidonMethod,
     // padding input with
-    pub summary: Option<Vec<F>>,
+    pub summary: Vec<F>,
     // padding function
-    pub padding: Option<fn(&[F], usize, left: &[F], right: &[F]) -> Vec<F>>,
+    pub summary_fn: Option<fn(&[F], usize, left: &F, right: &F) -> Vec<F>>,
+    // hasher
+    pub hasher: Poseidon2<F>,
+}
+
+impl<F: PrimeField> super::HashFunction<F> for PoseidonHash<F> {
+    // impl<F: PrimeField> PoseidonHash<F> {
+    fn zero(&self) -> F {
+        let zero = F::zero();
+        zero
+    }
+
+    fn pad(&self, left: &F, right: &F) -> Vec<F> {
+        if let Some(summary_fn) = self.summary_fn {
+            return summary_fn(&[], self.method.statesize(), left, right);
+        } else {
+            let mut padding = self.summary.clone();
+            padding.push(left.to_owned());
+            padding.push(right.to_owned());
+            return padding;
+        }
+    }
+
+    fn hash(&self, left: &F, right: &F) -> anyhow::Result<Vec<F>> {
+        let input = self.pad(left, right);
+        Ok(self.hasher.permutation(&input))
+    }
+}
+
+impl<F: PrimeField> PoseidonHash<F> {
+    pub fn new_for_bintree(
+        method: PoseidonMethod,
+        summary: Option<Vec<F>>,
+        rand: bool,
+        summary_fn: Option<fn(&[F], usize, left: &F, right: &F) -> Vec<F>>,
+        hasher: Poseidon2<F>,
+    ) -> anyhow::Result<Self> {
+        if summary_fn.is_some() {
+            return Ok(PoseidonHash {
+                method,
+                summary: vec![],
+                summary_fn,
+                hasher,
+            });
+        }
+
+        let input_len = method.statesize();
+        let pad_len = input_len - 2; // 2 for bin tree
+        let mut padding = vec![];
+        if let Some(summary) = summary {
+            for i in 0..pad_len {
+                padding.push(summary[i].clone());
+            }
+        } else {
+            if rand {
+                padding = method.input_rand_gen()?[..pad_len].to_vec();
+            } else {
+                padding = method.input_zero()[..pad_len].to_vec();
+            }
+        }
+
+        Ok(PoseidonHash {
+            method,
+            summary: padding,
+            summary_fn,
+            hasher,
+        })
+    }
 }
 
 // Poseidon hash function
@@ -134,26 +201,3 @@ impl PoseidonMethod {
         input
     }
 }
-
-// impl HashFunction for Poseidon {
-//     fn hash<F: PrimeField>(&self, left: &[F], right: &[F]) -> anyhow::Result<F> {
-//         // match self {
-//         //     Poseidon::Bn256 => {
-//         //         let poseidon2 = Poseidon2::new(&POSEIDON2_BN256_PARAMS);
-
-//         //         let hash = hasher.hash();
-//         //         Ok(hash)
-//         //     }
-//         //     Poseidon::Goldilocks(rounds) => {
-//         //         let mut hasher = PoseidonGoldilocks::new_with_preimage(input, *rounds);
-//         //         let hash = hasher.hash();
-//         //         Ok(hash)
-//         //     }
-//         //     Poseidon::Vesta => {
-//         //         let mut hasher = PoseidonVesta::new_with_preimage(input);
-//         //         let hash = hasher.hash();
-//         //         Ok(hash)
-//         //     }
-//         // }
-//     }
-// }

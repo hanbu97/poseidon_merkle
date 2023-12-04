@@ -556,7 +556,9 @@ mod poseidon2_tests_bn256 {
     #[test]
     fn zero_perm() {
         use crate::ark_ff::Zero;
-        let poseidon2 = Poseidon2::new(&POSEIDON2_BN256_PARAMS);
+        let poseidon2: Poseidon2<
+            ark_ff::Fp<ark_ff::MontBackend<crate::fields::bn256::FqConfig, 4>, 4>,
+        > = Poseidon2::new(&POSEIDON2_BN256_PARAMS);
         let t = poseidon2.params.t;
 
         let mut input0 = Vec::new();
@@ -575,6 +577,7 @@ mod poseidon2_tests_bn256 {
         let cbor_str = encode_to_cbor_string(&perm3);
         dbg!(cbor_str);
         let perm4 = poseidon2.permutation(&input1);
+
         let cbor_str = encode_to_cbor_string(&perm4);
         dbg!(cbor_str);
     }

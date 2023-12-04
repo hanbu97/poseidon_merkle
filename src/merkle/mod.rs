@@ -2,11 +2,11 @@ use ark_ff::PrimeField;
 
 use crate::hash::HashFunction;
 
-pub struct Proof {
+pub struct Proof<F: PrimeField> {
     pub index: usize,
-    pub value: String,
-    pub siblings: Vec<String>,
-    pub root: String,
+    pub value: F,
+    pub siblings: Vec<F>,
+    pub root: F,
     pub empty: bool,
 }
 
@@ -31,18 +31,16 @@ pub fn log2_pow2(n: usize) -> usize {
 }
 
 pub struct MerkleTree<F: PrimeField, H: HashFunction<F>> {
-    data: Vec<String>,        // Stores hash values for all nodes
-    leafs: usize,             // Number of leaf nodes
-    height: usize,            // Height of the tree
-    zero_hashes: Vec<String>, // Stores precomputed hashes of zero nodes at each level
-    min_index: usize,         // Minimum index of used leaf nodes
-    max_index: usize,         // Maximum index of used leaf nodes
-    hash_function: H,         // Hash function instance
+    data: Vec<F>,        // Stores hash values for all nodes
+    leafs: usize,        // Number of leaf nodes
+    height: usize,       // Height of the tree
+    zero_hashes: Vec<F>, // Stores precomputed hashes of zero nodes at each level
+    min_index: usize,    // Minimum index of used leaf nodes
+    max_index: usize,    // Maximum index of used leaf nodes
+    hash_function: H,    // Hash function instance
 }
 
 impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
-    fn _hash(&self, a: &String, b: &String) -> String {}
-
     /// Creates a new Merkle tree with a specified number of levels.
     /// Initializes a tree with 2^n empty leaf nodes.
     pub fn new_with_levels(n: usize, hash_function: H) -> anyhow::Result<MerkleTree<F, H>> {
@@ -50,23 +48,23 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
         let leafs = 1 << n; // 2^n leaf nodes
 
         // Create a vector with empty leaf values
-        let leaf_values = vec![String::from("0"); leafs];
+        let leaf_values = vec![hash_function.zero(); leafs];
 
         // Call the original new method with the prepared leaf values
         MerkleTree::new(leaf_values, hash_function)
     }
 
     /// Creates a new fully computed Merkle tree with given leaf node values.
-    pub fn new(leaf_values: Vec<String>, hash_function: H) -> anyhow::Result<MerkleTree<F, H>> {
+    pub fn new(leaf_values: Vec<F>, hash_function: H) -> anyhow::Result<MerkleTree<F, H>> {
         let leafs: usize = next_pow2(leaf_values.len());
-        let size = 2 * leafs - 1;
-        let data = vec![String::from("0"); size];
+        let size: usize = 2 * leafs - 1;
+        let data = vec![hash_function.zero(); size];
 
         let mut mt = MerkleTree {
             data,
             leafs,
             height: log2_pow2(size + 1),
-            zero_hashes: vec![String::from("0"); log2_pow2(leafs) + 1],
+            zero_hashes: vec![hash_function.zero(); log2_pow2(leafs) + 1],
             min_index: usize::MAX,
             max_index: 0,
             hash_function,
@@ -81,7 +79,7 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
 
     /// Computes the hashes for zero-value nodes at each level of the tree.
     fn compute_zero_hashes(&mut self) {
-        let mut current_zero_hash = String::from("0");
+        let mut current_zero_hash = self.hash_function.zero();
 
         for i in 0..self.zero_hashes.len() {
             self.zero_hashes[i] = self._hash(&current_zero_hash, &current_zero_hash);
@@ -94,7 +92,7 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
         &mut self,
         node_index: usize,
         leaf_index: usize,
-        value: String,
+        value: F,
         level: usize,
     ) {
         if level == self.height {
@@ -121,7 +119,7 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     }
 
     /// Inserts a leaf node value and updates the Merkle tree.
-    pub fn insert_leaf(&mut self, index: usize, value: String) -> anyhow::Result<()> {
+    pub fn insert_leaf(&mut self, index: usize, value: F) -> anyhow::Result<()> {
         if index >= self.leafs {
             return Err(anyhow::anyhow!("Index out of bounds"));
         }
@@ -133,13 +131,13 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     }
 
     /// Generates a proof for a leaf node.
-    pub fn get_proof(&self, index: usize) -> anyhow::Result<Proof> {
+    pub fn get_proof(&self, index: usize) -> anyhow::Result<Proof<F>> {
         if index >= self.leafs {
             return Err(anyhow::anyhow!("Index out of bounds"));
         }
 
-        let mut lemma: Vec<String> = Vec::with_capacity(self.height + 1);
-        let mut path: Vec<String> = Vec::with_capacity(self.height - 1);
+        let mut lemma: Vec<F> = Vec::with_capacity(self.height + 1);
+        let mut path: Vec<F> = Vec::with_capacity(self.height - 1);
 
         let mut idx = index;
         let mut base = 0;
@@ -164,12 +162,12 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
             value: self.data[index].clone(),
             siblings: path,
             root: self.root(),
-            empty: self.data[index] == "0",
+            empty: self.data[index] == self.hash_function.zero(),
         })
     }
 
     /// Verifies a proof.
-    pub fn prove(&self, proof: Proof) -> bool {
+    pub fn prove(&self, proof: Proof<F>) -> bool {
         let mut computed_hash = proof.value;
         let mut idx = proof.index;
 
@@ -186,7 +184,11 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     }
 
     /// Returns the Merkle root.
-    pub fn root(&self) -> String {
+    pub fn root(&self) -> F {
         self.data.last().unwrap().clone()
+    }
+
+    fn _hash(&self, a: &F, b: &F) -> F {
+        *a + *b
     }
 }
