@@ -32,13 +32,16 @@ pub fn log2_pow2(n: usize) -> usize {
 }
 
 pub struct MerkleTree<F: PrimeField, H: HashFunction<F>> {
-    pub data: Vec<F>,    // Stores hash values for all nodes
-    leafs: usize,        // Number of leaf nodes
-    pub height: usize,   // Height of the tree
+    pub data: Vec<F>,  // Stores hash values for all nodes
+    leafs: usize,      // Number of leaf nodes
+    pub height: usize, // Height of the tree
+    #[allow(dead_code)]
     zero_hashes: Vec<F>, // Stores precomputed hashes of zero nodes at each level
-    min_index: usize,    // Minimum index of used leaf nodes
-    max_index: usize,    // Maximum index of used leaf nodes
-    hash_function: H,    // Hash function instance
+    #[allow(dead_code)]
+    min_index: usize, // Minimum index of used leaf nodes
+    #[allow(dead_code)]
+    max_index: usize, // Maximum index of used leaf nodes
+    hash_function: H,  // Hash function instance
 }
 
 impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
@@ -64,9 +67,8 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
         let mut current_zero_hash = hash_function.zero();
         let mut zero_hashes = Vec::with_capacity(height);
         for _ in 0..height {
-            zero_hashes.push(current_zero_hash.clone());
-            current_zero_hash =
-                hash_function.hash(&current_zero_hash, &current_zero_hash)?[1].clone();
+            zero_hashes.push(current_zero_hash);
+            current_zero_hash = hash_function.hash(&current_zero_hash, &current_zero_hash)?[1];
         }
 
         // calculate merkle tree
@@ -87,7 +89,7 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
                 let right = data[right_index];
 
                 data[level_leafs_accumulated + current_level_size + i / 2] =
-                    hash_function.hash(&left, &right)?[1].clone();
+                    hash_function.hash(&left, &right)?[1];
                 i += 2;
             }
 
@@ -140,10 +142,10 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
             return Err(anyhow::anyhow!("Index out of bounds"));
         }
 
-        self.data[index] = value.clone();
+        self.data[index] = value;
         let (siblings, parents) = self.compute_indices(index);
 
-        let mut value = value.clone();
+        let mut value = value;
         for (sib_idx, par_idx) in siblings.iter().zip(parents.iter()) {
             let sibling_index = *sib_idx;
             let parent_index = *par_idx;
@@ -167,12 +169,12 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
             return Err(anyhow::anyhow!("Index out of bounds")); // Check if the index is within the bounds
         }
 
-        let leaf_value = self.data[index].clone(); // Clone the leaf value
+        let leaf_value = self.data[index]; // Clone the leaf value
         let (siblings, _) = self.compute_indices(index);
 
         let path: Vec<F> = siblings
             .iter()
-            .map(|sibling_index| self.data[*sibling_index].clone())
+            .map(|sibling_index| self.data[*sibling_index])
             .collect();
         let root_value = self.root(); // Clone the root value
 
@@ -188,22 +190,14 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     /// Verifies a proof.
     pub fn prove(&self, proof: Proof<F>) -> anyhow::Result<bool> {
         let mut computed_hash = proof.value;
-        let (siblings, parents) = self.compute_indices(proof.index);
-        let mut sibidx = 0;
+        let (siblings, _) = self.compute_indices(proof.index);
 
-        let parents = parents
-            .iter()
-            .map(|p| self.data[*p].clone())
-            .collect::<Vec<F>>();
-
-        for sib in siblings {
+        for (sibidx, sib) in siblings.into_iter().enumerate() {
             if sib % 2 == 0 {
                 computed_hash = self._hash(&proof.siblings[sibidx], &computed_hash)?;
             } else {
                 computed_hash = self._hash(&computed_hash, &proof.siblings[sibidx])?;
             }
-
-            sibidx += 1;
         }
 
         Ok(computed_hash == proof.root
@@ -213,11 +207,11 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
 
     /// Returns the Merkle root.
     pub fn root(&self) -> F {
-        self.data.last().unwrap().clone()
+        *self.data.last().unwrap()
     }
 
     fn _hash(&self, a: &F, b: &F) -> anyhow::Result<F> {
         let out = self.hash_function.hash(a, b)?;
-        Ok(out[1].clone())
+        Ok(out[1])
     }
 }

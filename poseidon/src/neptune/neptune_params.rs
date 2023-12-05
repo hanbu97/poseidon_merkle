@@ -70,11 +70,7 @@ impl<S: PrimeField> NeptuneParams<S> {
 
     fn instantiate_rc(t: usize, rounds: usize) -> Vec<Vec<S>> {
         (0..rounds)
-            .map(|_| {
-                (0..t)
-                    .map(|_| utils::random_scalar())
-                    .collect()
-            })
+            .map(|_| (0..t).map(|_| utils::random_scalar()).collect())
             .collect()
     }
 
@@ -106,33 +102,15 @@ impl<S: PrimeField> NeptuneParams<S> {
             m_ = Self::circ_mat(&[S::from(2 as u64), S::one()]);
             m__ = Self::circ_mat(&[S::one(), S::from(2 as u64)]);
         } else if t == 8 {
-            m_ = Self::circ_mat(&[
-                S::from(3 as u64),
-                S::from(2 as u64),
-                S::from(1 as u64),
-                S::from(1 as u64),
-            ]);
-            m__ = Self::circ_mat(&[
-                S::from(1 as u64),
-                S::from(1 as u64),
-                S::from(2 as u64),
-                S::from(3 as u64),
-            ]);
+            m_ = Self::circ_mat(&[S::from(3u64), S::from(2u64), S::from(1u64), S::from(1u64)]);
+            m__ = Self::circ_mat(&[S::from(1u64), S::from(1u64), S::from(2u64), S::from(3u64)]);
         } else {
             // TODO adapt for real instantiation :)
             m_ = (0..t_)
-                .map(|_| {
-                    (0..t_)
-                        .map(|_| utils::random_scalar())
-                        .collect()
-                })
+                .map(|_| (0..t_).map(|_| utils::random_scalar()).collect())
                 .collect();
             m__ = (0..t_)
-                .map(|_| {
-                    (0..t_)
-                        .map(|_| utils::random_scalar())
-                        .collect()
-                })
+                .map(|_| (0..t_).map(|_| utils::random_scalar()).collect())
                 .collect();
         }
 

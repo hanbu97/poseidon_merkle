@@ -2,15 +2,14 @@ use merkle::{
     hash::poseidon::{PoseidonHash, PoseidonMethod},
     merkle::MerkleTree,
 };
-use zkhash::{fields::bn256::FpBN256, poseidon2::poseidon2::Poseidon2};
+use zkhash::fields::bn256::FpBN256;
 
 // Main function for testing
 fn main() -> anyhow::Result<()> {
     let n = 4;
 
     let method = PoseidonMethod::Bn256;
-    let hasher: Poseidon2<ark_ff::Fp<ark_ff::MontBackend<zkhash::fields::bn256::FqConfig, 4>, 4>> =
-        PoseidonMethod::new_bn256()?;
+    let hasher = PoseidonMethod::new_bn256()?;
     let hash_function = PoseidonHash::new_for_bintree(method, None, true, None, hasher)?;
     let mut tree = MerkleTree::new_with_levels(n, hash_function)?;
 

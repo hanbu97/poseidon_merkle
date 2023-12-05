@@ -32,18 +32,17 @@ pub struct PoseidonHash<F: PrimeField> {
 impl<F: PrimeField> super::HashFunction<F> for PoseidonHash<F> {
     // impl<F: PrimeField> PoseidonHash<F> {
     fn zero(&self) -> F {
-        let zero = F::zero();
-        zero
+        F::zero()
     }
 
     fn pad(&self, left: &F, right: &F) -> Vec<F> {
         if let Some(summary_fn) = self.summary_fn {
-            return summary_fn(&[], self.method.statesize(), left, right);
+            summary_fn(&[], self.method.statesize(), left, right)
         } else {
             let mut padding = self.summary.clone();
             padding.push(left.to_owned());
             padding.push(right.to_owned());
-            return padding;
+            padding
         }
     }
 
@@ -74,15 +73,13 @@ impl<F: PrimeField> PoseidonHash<F> {
         let pad_len = input_len - 2; // 2 for bin tree
         let mut padding = vec![];
         if let Some(summary) = summary {
-            for i in 0..pad_len {
-                padding.push(summary[i].clone());
+            for pad in summary.iter().take(pad_len) {
+                padding.push(pad.to_owned());
             }
+        } else if rand {
+            padding = method.input_rand_gen()?[..pad_len].to_vec();
         } else {
-            if rand {
-                padding = method.input_rand_gen()?[..pad_len].to_vec();
-            } else {
-                padding = method.input_zero()[..pad_len].to_vec();
-            }
+            padding = method.input_zero()[..pad_len].to_vec();
         }
 
         Ok(PoseidonHash {
@@ -166,15 +163,7 @@ impl PoseidonMethod {
         }
 
         // read to F vector
-        let data: Vec<F> = input
-            .into_iter()
-            .map(|s| {
-                let data = from_hex(s);
-                data
-            })
-            .collect();
-
-        Ok(data)
+        Ok(input.iter().map(|s| from_hex(s)).collect())
     }
 
     // read input from cbor
@@ -214,15 +203,12 @@ impl PoseidonMethod {
 
     // zero
     pub fn zero<F: PrimeField>(&self) -> F {
-        let zero = F::zero();
-        zero
+        F::zero()
     }
 
     // zero input
     pub fn input_zero<F: PrimeField>(&self) -> Vec<F> {
         let t = self.statesize();
-        let input = (0..t).map(|_| self.zero()).collect();
-
-        input
+        (0..t).map(|_| self.zero()).collect()
     }
 }
