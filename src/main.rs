@@ -8,9 +8,8 @@ use zkhash::fields::bn256::FpBN256;
 fn main() -> anyhow::Result<()> {
     let n = 4;
 
-    let method = PoseidonMethod::Bn256;
     let hasher = PoseidonMethod::new_bn256()?;
-    let hash_function = PoseidonHash::new_for_bintree(method, None, true, None, hasher)?;
+    let hash_function = PoseidonHash::new_for_bintree(None, true, None, hasher)?;
     let mut tree = MerkleTree::new_with_levels(n, hash_function)?;
 
     tree.insert_leaf(0, FpBN256::from(123u64))?;

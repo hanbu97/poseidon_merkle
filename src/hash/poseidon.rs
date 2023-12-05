@@ -54,18 +54,19 @@ impl<F: PrimeField> super::HashFunction<F> for PoseidonHash<F> {
 
 impl<F: PrimeField> PoseidonHash<F> {
     pub fn new_for_bintree(
-        method: PoseidonMethod,
         summary: Option<Vec<F>>,
         rand: bool,
         summary_fn: Option<fn(&[F], usize, left: &F, right: &F) -> Vec<F>>,
-        hasher: Poseidon2<F>,
+        hasher: PoseidonHasher<F>,
     ) -> anyhow::Result<Self> {
+        let method = hasher.method;
+
         if summary_fn.is_some() {
             return Ok(PoseidonHash {
                 method,
                 summary: vec![],
                 summary_fn,
-                hasher,
+                hasher: hasher.hasher,
             });
         }
 
@@ -86,7 +87,7 @@ impl<F: PrimeField> PoseidonHash<F> {
             method,
             summary: padding,
             summary_fn,
-            hasher,
+            hasher: hasher.hasher,
         })
     }
 }
@@ -98,13 +99,21 @@ pub enum PoseidonMethod {
     Vesta,
 }
 
+pub struct PoseidonHasher<F: PrimeField> {
+    pub method: PoseidonMethod,
+    pub hasher: Poseidon2<F>,
+}
+
 impl PoseidonMethod {
-    pub fn new_bn256() -> anyhow::Result<Poseidon2<FpBN256>> {
+    pub fn new_bn256() -> anyhow::Result<PoseidonHasher<FpBN256>> {
         let poseidon2 = Poseidon2::new(&POSEIDON2_BN256_PARAMS);
-        Ok(poseidon2)
+        Ok(PoseidonHasher {
+            method: PoseidonMethod::Bn256,
+            hasher: poseidon2,
+        })
     }
 
-    pub fn new_goldilocks(rounds: usize) -> anyhow::Result<Poseidon2<FpGoldiLocks>> {
+    pub fn new_goldilocks(rounds: usize) -> anyhow::Result<PoseidonHasher<FpGoldiLocks>> {
         // check if rounds is valid(8, 12, 16, 20)
         if rounds != 8 && rounds != 12 && rounds != 16 && rounds != 20 {
             return Err(anyhow::anyhow!(
@@ -124,12 +133,18 @@ impl PoseidonMethod {
             }
         };
 
-        Ok(poseidon2)
+        Ok(PoseidonHasher {
+            method: PoseidonMethod::Goldilocks(rounds),
+            hasher: poseidon2,
+        })
     }
 
-    pub fn new_vesta() -> anyhow::Result<Poseidon2<FpVesta>> {
+    pub fn new_vesta() -> anyhow::Result<PoseidonHasher<FpVesta>> {
         let poseidon2 = Poseidon2::new(&POSEIDON2_VESTA_PARAMS);
-        Ok(poseidon2)
+        Ok(PoseidonHasher {
+            method: PoseidonMethod::Vesta,
+            hasher: poseidon2,
+        })
     }
 
     // get statesize
