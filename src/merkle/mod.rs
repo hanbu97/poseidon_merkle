@@ -2,7 +2,7 @@ use ark_ff::PrimeField;
 
 use crate::hash::HashFunction;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Proof<F: PrimeField> {
     pub index: usize,
     pub value: F,
@@ -32,9 +32,9 @@ pub fn log2_pow2(n: usize) -> usize {
 }
 
 pub struct MerkleTree<F: PrimeField, H: HashFunction<F>> {
-    data: Vec<F>,        // Stores hash values for all nodes
+    pub data: Vec<F>,    // Stores hash values for all nodes
     leafs: usize,        // Number of leaf nodes
-    height: usize,       // Height of the tree
+    pub height: usize,   // Height of the tree
     zero_hashes: Vec<F>, // Stores precomputed hashes of zero nodes at each level
     min_index: usize,    // Minimum index of used leaf nodes
     max_index: usize,    // Maximum index of used leaf nodes
@@ -46,9 +46,8 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     /// Initializes a tree with 2^n empty leaf nodes.
     pub fn new_with_levels(n: usize, hash_function: H) -> anyhow::Result<MerkleTree<F, H>> {
         // Calculate the number of leaf nodes based on the number of levels
-        let leafs = 1 << n; // 2^n leaf nodes
-
-        // Create a vector with empty leaf values
+        let leafs = 1 << (n - 1); // 2^n leaf nodes
+                                  // Create a vector with empty leaf values
         let leaf_values = vec![hash_function.zero(); leafs];
 
         // Call the original new method with the prepared leaf values
@@ -59,84 +58,105 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     pub fn new(leaf_values: Vec<F>, hash_function: H) -> anyhow::Result<MerkleTree<F, H>> {
         let leafs: usize = next_pow2(leaf_values.len());
         let size: usize = 2 * leafs - 1;
-        let data = vec![hash_function.zero(); size];
+        let height: usize = log2_pow2(leafs);
 
-        let mut mt = MerkleTree {
+        // compute zeros
+        let mut current_zero_hash = hash_function.zero();
+        let mut zero_hashes = Vec::with_capacity(height);
+        for _ in 0..height {
+            zero_hashes.push(current_zero_hash.clone());
+            current_zero_hash =
+                hash_function.hash(&current_zero_hash, &current_zero_hash)?[1].clone();
+        }
+
+        // calculate merkle tree
+        let mut data = leaf_values.clone();
+        data.resize(size, hash_function.zero());
+
+        let mut current_level = 0;
+        let mut current_level_size = leafs;
+        let mut level_leafs_accumulated = 0;
+
+        while current_level < height {
+            let mut i = 0;
+            while i < current_level_size {
+                let left_index = level_leafs_accumulated + i;
+                let right_index = left_index + 1;
+
+                let left = data[left_index];
+                let right = data[right_index];
+
+                data[level_leafs_accumulated + current_level_size + i / 2] =
+                    hash_function.hash(&left, &right)?[1].clone();
+                i += 2;
+            }
+
+            level_leafs_accumulated += current_level_size;
+            current_level_size /= 2;
+            current_level += 1;
+        }
+
+        let mt = MerkleTree {
             data,
             leafs,
-            height: log2_pow2(size + 1),
-            zero_hashes: vec![hash_function.zero(); log2_pow2(leafs) + 1],
+            height,
+            zero_hashes,
             min_index: usize::MAX,
             max_index: 0,
             hash_function,
         };
 
-        mt.compute_zero_hashes();
-        for (i, value) in leaf_values.into_iter().enumerate() {
-            mt.insert_leaf(i, value)?;
-        }
         Ok(mt)
     }
 
-    /// Computes the hashes for zero-value nodes at each level of the tree.
-    fn compute_zero_hashes(&mut self) -> anyhow::Result<()> {
-        let mut current_zero_hash = self.hash_function.zero();
+    /// computes siblings and parent nodes index
+    pub fn compute_indices(&self, index: usize) -> (Vec<usize>, Vec<usize>) {
+        let mut level = 0;
+        let mut level_leafs = self.leafs;
+        let mut level_leafs_accumulated = 0;
 
-        for i in 0..self.zero_hashes.len() {
-            self.zero_hashes[i] = self._hash(&current_zero_hash, &current_zero_hash)?;
-            current_zero_hash = self.zero_hashes[i].clone();
+        let mut siblings = vec![];
+        let mut parents = vec![];
+        let mut index = index;
+
+        while level < self.height {
+            let sibling_index = if index % 2 == 0 { index + 1 } else { index - 1 };
+            siblings.push(sibling_index + level_leafs_accumulated);
+
+            level_leafs_accumulated += level_leafs;
+            level_leafs /= 2;
+            let parent_index = index / 2;
+            index = parent_index;
+            parents.push(parent_index + level_leafs_accumulated);
+
+            level += 1;
         }
 
-        Ok(())
+        (siblings, parents)
     }
 
-    fn insert_leaf_recursive(
-        &mut self,
-        node_index: usize,
-        leaf_index: usize,
-        value: F,
-        level: usize,
-    ) -> anyhow::Result<()> {
-        // Check if node_index is within the range of data
-        if node_index >= self.data.len() {
-            return Ok(());
-        }
-
-        if level == self.height - 1 {
-            // At a leaf node, set the value
-            self.data[node_index] = value;
-        } else {
-            let half_width = self.leafs >> (level + 1); // Number of nodes on each side at current level
-            let left_index = 2 * node_index + 1;
-            let right_index = left_index + 1;
-
-            if leaf_index < half_width {
-                // Recurse into the left subtree
-                self.insert_leaf_recursive(left_index, leaf_index, value, level + 1)?;
-            } else {
-                // Recurse into the right subtree
-                self.insert_leaf_recursive(right_index, leaf_index - half_width, value, level + 1)?;
-            }
-
-            let tmpzero = self.hash_function.zero();
-
-            // Update the hash of the parent node
-            let left_hash: &F = self.data.get(left_index).unwrap_or(&tmpzero);
-            let right_hash = self.data.get(right_index).unwrap_or(&tmpzero);
-            self.data[node_index] = self._hash(left_hash, right_hash)?;
-        }
-
-        Ok(())
-    }
-
-    /// Inserts a leaf node value and updates the Merkle tree.
     pub fn insert_leaf(&mut self, index: usize, value: F) -> anyhow::Result<()> {
         if index >= self.leafs {
             return Err(anyhow::anyhow!("Index out of bounds"));
         }
-        self.min_index = self.min_index.min(index);
-        self.max_index = self.max_index.max(index);
-        self.insert_leaf_recursive(0, index, value, 0)?;
+
+        self.data[index] = value.clone();
+        let (siblings, parents) = self.compute_indices(index);
+
+        let mut value = value.clone();
+        for (sib_idx, par_idx) in siblings.iter().zip(parents.iter()) {
+            let sibling_index = *sib_idx;
+            let parent_index = *par_idx;
+
+            let sibling = self.data[sibling_index];
+            value = if sibling_index % 2 == 0 {
+                self._hash(&sibling, &value)?
+            } else {
+                self._hash(&value, &sibling)?
+            };
+
+            self.data[parent_index] = value;
+        }
 
         Ok(())
     }
@@ -144,57 +164,51 @@ impl<F: PrimeField, H: HashFunction<F>> MerkleTree<F, H> {
     /// Generates a proof for a leaf node.
     pub fn get_proof(&self, index: usize) -> anyhow::Result<Proof<F>> {
         if index >= self.leafs {
-            return Err(anyhow::anyhow!("Index out of bounds"));
+            return Err(anyhow::anyhow!("Index out of bounds")); // Check if the index is within the bounds
         }
 
-        let mut lemma: Vec<F> = Vec::with_capacity(self.height + 1);
-        let mut path: Vec<F> = Vec::with_capacity(self.height - 1);
+        let leaf_value = self.data[index].clone(); // Clone the leaf value
+        let (siblings, _) = self.compute_indices(index);
 
-        let mut idx = index;
-        let mut base = 0;
-        let mut width = self.leafs;
-
-        lemma.push(self.data[idx].clone());
-        while base < self.data.len() {
-            let sibling = if idx % 2 == 0 {
-                base + idx + 1
-            } else {
-                base + idx - 1
-            };
-
-            if sibling < self.data.len() {
-                path.push(self.data[sibling].clone());
-            }
-
-            idx = (base + idx) / 2;
-            base += width;
-            width /= 2;
-        }
+        let path: Vec<F> = siblings
+            .iter()
+            .map(|sibling_index| self.data[*sibling_index].clone())
+            .collect();
+        let root_value = self.root(); // Clone the root value
 
         Ok(Proof {
             index,
-            value: self.data[index].clone(),
+            value: leaf_value,
             siblings: path,
-            root: self.root(),
-            empty: self.data[index] == self.hash_function.zero(),
+            root: root_value,
+            empty: leaf_value == self.hash_function.zero(), // Check if the leaf value is the same as zero value
         })
     }
 
     /// Verifies a proof.
     pub fn prove(&self, proof: Proof<F>) -> anyhow::Result<bool> {
         let mut computed_hash = proof.value;
-        let mut idx = proof.index;
+        let (siblings, parents) = self.compute_indices(proof.index);
+        let mut sibidx = 0;
 
-        for sibling_hash in proof.siblings {
-            if idx % 2 == 0 {
-                computed_hash = self._hash(&computed_hash, &sibling_hash)?;
+        let parents = parents
+            .iter()
+            .map(|p| self.data[*p].clone())
+            .collect::<Vec<F>>();
+
+        for sib in siblings {
+            if sib % 2 == 0 {
+                computed_hash = self._hash(&proof.siblings[sibidx], &computed_hash)?;
             } else {
-                computed_hash = self._hash(&sibling_hash, &computed_hash)?;
+                computed_hash = self._hash(&computed_hash, &proof.siblings[sibidx])?;
             }
-            idx /= 2;
+
+            sibidx += 1;
         }
 
-        Ok(computed_hash == proof.root)
+        Ok(computed_hash == proof.root
+            && proof.root == self.root()
+            && proof.siblings.len() == self.height)
     }
 
     /// Returns the Merkle root.
